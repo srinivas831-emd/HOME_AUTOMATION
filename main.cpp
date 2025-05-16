@@ -17,6 +17,20 @@
 #define BUZZER_PIN D7
 
 
+// FUNCTION PROTOTYPE OR DECLARATION
+SheetValues readGoogleSheet();
+float light_intensity();
+float temperature();
+void door_status();
+float moisture();
+void collect_data();
+void sendData();
+void read();
+void IRAM_ATTR handleInterrupt();
+void buzzer(int thresh_hold,int buzzer_time);
+
+
+
 //WIFI CREDENTIALS
 const char* ssid = "VDK"; //--> Your wifi name or SSID.
 const char* password = "hotspt.vk"; //--> Your wifi password.
@@ -57,19 +71,6 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 BH1750 lightMeter;
 bool int_flag = 0;
-
-
-// FUNCTION PROTOTYPE OR DECLARATION
-SheetValues readGoogleSheet();
-float light_intensity();
-float temperature();
-void door_status();
-float moisture();
-void collect_data();
-void sendData();
-void read();
-void IRAM_ATTR handleInterrupt();
-void buzzer(int thresh_hold,int buzzer_time);
 
 
 // FUNCTION FOR READING FROM DATA GOOGLE_SHEET
