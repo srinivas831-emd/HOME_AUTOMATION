@@ -17,6 +17,51 @@
 #define BUZZER_PIN D7
 
 
+//WIFI CREDENTIALS
+const char* ssid = "S2VAUTOMATION_1"; //--> Your wifi name or SSID.
+const char* password = "S2v12345"; //--> Your wifi password.
+ 
+ 
+//HOST & HTTPSPORTS
+const char* host = "script.google.com";
+const int httpsPort = 443;
+String GAS_ID = "AKfycbypPaCgJvl-d5FC7wWSQfte3lLFzN9ex_tJpaXCARa2mcG7FPc5njIK1oiHnUBsrivQ";
+const char* path = "/macros/s/AKfycbypPaCgJvl-d5FC7wWSQfte3lLFzN9ex_tJpaXCARa2mcG7FPc5njIK1oiHnUBsrivQ/exec";
+
+
+WiFiClientSecure client; //Create a WiFiClientSecure object.
+
+ 
+
+//DATA FROM GOOGLE_SHEET
+struct SheetValues
+{
+  int A2;
+  int B2;
+  int C2;
+  bool success;
+}values;
+
+
+//DATA TO GOOGLE_SHEET
+struct data
+{
+  unsigned long previousReadMillis = 0;
+  unsigned long previousSendMillis = 0;
+  char door_condition[16];
+  unsigned long previousMillis = 0;
+  float light_sensor;
+  float temperature_sensor;
+  float moisture_sensor;
+}d;
+
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+BH1750 lightMeter;
+bool int_flag = 0;//FLAG USED FOR INTERRUPT 
+
+
 // FUNCTION PROTOTYPE OR DECLARATION
 SheetValues readGoogleSheet();
 float light_intensity();
@@ -27,50 +72,9 @@ void collect_data();
 void sendData();
 void read();
 void IRAM_ATTR handleInterrupt();
-void buzzer(int thresh_hold,int buzzer_time);
-
-
-
-//WIFI CREDENTIALS
-const char* ssid = "VDK"; //--> Your wifi name or SSID.
-const char* password = "hotspt.vk"; //--> Your wifi password.
- 
- 
-//HOST & HTTPSPORTS
-const char* host = "script.google.com";
-const int httpsPort = 443;
-String GAS_ID = "AKfycbwI1EN60V6WFy8PpXoIVJOxhXw2y_TqcUz7YfUN8dPHToAuj42yxpIY48KK75gUZOa5";
-const char* path = "/macros/s/AKfycbwI1EN60V6WFy8PpXoIVJOxhXw2y_TqcUz7YfUN8dPHToAuj42yxpIY48KK75gUZOa5/exec";
-
-
-WiFiClientSecure client; //Create a WiFiClientSecure object.
-unsigned long previousMillis = 0;
-const unsigned long interval = 1*60000; 
- 
-
-//DATA FROM GOOGLE_SHEET
-struct SheetValues
-{
-  int A2;
-  int B2;
-  bool success;
-}values;
-
-
-//DATA TO GOOGLE_SHEET
-struct data
-{
-  float light_sensor;
-  float temperature_sensor;
-  float moisture_sensor;
-  char door_condition[16];
-}d;
-
-
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
-BH1750 lightMeter;
-bool int_flag = 0;
+void buzzer();
+void sendDoorData();
+void sendTemperatureData();
 
 
 // FUNCTION FOR READING FROM DATA GOOGLE_SHEET
@@ -106,6 +110,7 @@ SheetValues readGoogleSheet()
     {
       result.A2 = doc["A2"];
       result.B2 = doc["B2"];
+      result.C2 = doc["C2"];
       result.success = true;
     } 
     else 
@@ -134,6 +139,8 @@ void read()
   {
     Serial.print("A2: "); Serial.println(values.A2);
     Serial.print("B2: "); Serial.println(values.B2);
+    Serial.print("C2: "); Serial.println(values.C2);
+
   } else 
   {
     Serial.println("Failed to read from Google Sheet");
@@ -155,8 +162,9 @@ float light_intensity()
 //FUNCTION FOR TEMPERATURE SENSOR
 float temperature()
 {
+  float tempC = 0;
   sensors.requestTemperatures();
-  float tempC = sensors.getTempCByIndex(0);
+  tempC = sensors.getTempCByIndex(0);
   Serial.print("Temperature: ");
   Serial.print(tempC);
   Serial.println(" °C");
@@ -199,7 +207,7 @@ void collect_data()
   d.moisture_sensor=moisture();
   d.light_sensor=light_intensity();
   door_status();
-  buzzer(values.A2,values.B2);
+  buzzer();
 }
 
 
@@ -223,7 +231,8 @@ void sendData()
   // String string_temperature =  String(tem, DEC); 
   String string_moisture =  String(d.moisture_sensor, 2);
   String string_light =  String(d.light_sensor, 2); 
- 
+  buzzer();
+  
   String url = "/macros/s/" + GAS_ID + "/exec?Temperature=" + string_temperature + "&Soil_Moisture=" + string_moisture + "&Light_Intensity=" + string_light + "&Door_Condition=" + d.door_condition ;
   Serial.print("requesting URL: ");
   Serial.println(url);
@@ -253,18 +262,116 @@ void sendData()
   Serial.println("==========");
   Serial.println();
   //----------------------------------------
+  
 } 
 
-//FUNCTION FOR BUZZER
-void buzzer(int thresh_hold,int buzzer_time)
+//FUNCTION FOR SENDIND DOOR DATA
+void sendDoorData()
 {
-  if(d.temperature_sensor >= thresh_hold)
+  Serial.println("==========");
+  Serial.print("connecting to ");
+  Serial.println(host);
+
+  //----------------------------------------Connect to Google host
+  if (!client.connect(host, httpsPort)) 
   {
+    Serial.println("connection failed");
+    return;
+  }
+  //----------------------------------------
+  
+  String url = "/macros/s/" + GAS_ID + "/exec?Door_Condition=" + d.door_condition ;
+  Serial.print("requesting URL: ");
+  Serial.println(url);
+ 
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+         "Host: " + host + "\r\n" +
+         "User-Agent: BuildFailureDetectorESP8266\r\n" +
+         "Connection: close\r\n\r\n");
+ 
+  Serial.println("request sent");
+  //----------------------------------------
+ 
+  //----------------------------------------Checking whether the data was sent successfully or not
+  while (client.connected()) 
+  {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") 
+    {
+      Serial.println("headers received");
+      break;
+    }
+  }
+  String line = client.readStringUntil('\n');
+  Serial.print("reply was : ");
+  Serial.println(line);
+  Serial.println("closing connection");
+  Serial.println("==========");
+  Serial.println();
+  //----------------------------------------
+}
+
+
+//FUNCTION FOR SENDIND TEMPERATURE DATA
+void sendTemperatureData()
+{
+  Serial.println("==========");
+  Serial.print("connecting to ");
+  Serial.println(host);
+  
+  
+  //----------------------------------------Connect to Google host
+  if (!client.connect(host, httpsPort)) 
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  //----------------------------------------
+  String string_temperature =  String(d.temperature_sensor,2);
+  String url = "/macros/s/" + GAS_ID + "/exec?Temperature=" + string_temperature;
+  Serial.print("requesting URL: ");
+  Serial.println(url);
+ 
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+         "Host: " + host + "\r\n" +
+         "User-Agent: BuildFailureDetectorESP8266\r\n" +
+         "Connection: close\r\n\r\n");
+ 
+  Serial.println("request sent");
+  //----------------------------------------
+ 
+  //----------------------------------------Checking whether the data was sent successfully or not
+  while (client.connected()) 
+  {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") 
+    {
+      Serial.println("headers received");
+      break;
+    }
+  }
+  String line = client.readStringUntil('\n');
+  Serial.print("reply was : ");
+  Serial.println(line);
+  Serial.println("closing connection");
+  Serial.println("==========");
+  Serial.println();
+  //----------------------------------------
+}
+
+
+//FUNCTION FOR BUZZER
+void buzzer()
+{
+  if(d.temperature_sensor >= values.A2)
+  {
+    sendTemperatureData();
     digitalWrite(BUZZER_PIN, HIGH);  // Turn ON once
-    delay(buzzer_time * 1000);       // Wait for full duration
+    delay(values.B2 * 1000);       // Wait for full duration
     digitalWrite(BUZZER_PIN, LOW);   // Turn OFF
   }
 }
+
 
 //INTERRUPT SERVICE ROUTINE
 void IRAM_ATTR handleInterrupt() 
@@ -309,7 +416,7 @@ void setup()
     sendData();
     
     // Set previousMillis to now to properly time the next interval
-    previousMillis = millis();
+    d.previousMillis = millis();
   } 
   else 
   {
@@ -321,18 +428,30 @@ void setup()
 void loop()
  {
   unsigned long currentMillis = millis();
-  if (int_flag == 1)
+  unsigned long readInterval = 3000;          // 3 seconds for reading
+  unsigned long sendInterval = values.C2 * 60 * 1000;  // C2 minutes for sending
+  
+  // Handle interrupt flag (highest priority)
+  if (int_flag == 1) 
   {
     int_flag = 0;
-    collect_data();
-    sendData(); 
+    door_status();
+    sendDoorData();
   }
 
-  if (currentMillis - previousMillis >= interval) 
+  // Independent timing for reading/collecting data
+  if (currentMillis - d.previousReadMillis >= readInterval) 
   {
-    previousMillis += interval; // Avoid drift
+    d.previousReadMillis = currentMillis;  // Reset the timer
     read();
     collect_data();
+  }  
+
+  // Independent timing for sending data
+  if (currentMillis - d.previousSendMillis >= sendInterval) 
+  {
+    d.previousSendMillis = currentMillis;  // Reset the timer
     sendData();
   }    
- }
+} 
+ 
