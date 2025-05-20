@@ -1,8 +1,8 @@
 #include <Arduino.h>
-#include <WiFiClientSecure.h>
 #include <ESP8266WiFi.h>
-#include <ArduinoJson.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
 #include <Wire.h>
 #include <BH1750.h>
 #include <OneWire.h>
@@ -50,6 +50,8 @@ struct data
   unsigned long previousSendMillis = 0;
   char door_condition[16];
   unsigned long previousMillis = 0;
+  int dryValue = 711;
+  int wetValue = 304;
   float light_sensor;
   float temperature_sensor;
   float moisture_sensor;
@@ -75,6 +77,9 @@ void IRAM_ATTR handleInterrupt();
 void buzzer();
 void sendDoorData();
 void sendTemperatureData();
+void sendMoistureData(); 
+
+
 
 
 // FUNCTION FOR READING FROM DATA GOOGLE_SHEET
@@ -130,6 +135,8 @@ SheetValues readGoogleSheet()
 }
 
 
+
+
 //FUNCTION FOR ASSIGNING VALUE TO VARIABLES RECEIVED FOR GOOGLE_SHEET
 void read()
 {
@@ -159,6 +166,8 @@ float light_intensity()
 }
 
 
+
+
 //FUNCTION FOR TEMPERATURE SENSOR
 float temperature()
 {
@@ -170,6 +179,8 @@ float temperature()
   Serial.println(" °C");
   return tempC;
 }
+
+
 
 
 //FUNCTION FOR DOOR SENSOR
@@ -190,14 +201,25 @@ void door_status()
 }
 
 
+
+
 //FUNCTION FOR SOIL MOISTURE SENSOR
 float moisture()
 {
   float mos = analogRead(AOUT_PIN);
   Serial.print("moisture: ");
-  Serial.println(mos);
-  return mos;
+  float moisturePercent = map(mos, d.dryValue, d.wetValue, 0, 100);
+  moisturePercent = constrain(moisturePercent, 0, 100);
+  Serial.print(mos);
+  Serial.println(moisturePercent);
+  if(moisturePercent<=20)
+  {
+    sendMoistureData();
+  }
+  return moisturePercent;
 }
+
+
 
 
 //FUNCTION FOR COLLECTING DATA FROM SENSOR
@@ -209,6 +231,8 @@ void collect_data()
   door_status();
   buzzer();
 }
+
+
 
 
 //FUNCTION FOR SENDIND SENSOR DATA TO GOOGLE_SHEET
@@ -229,10 +253,9 @@ void sendData()
   //----------------------------------------Processing data and sending data
   String string_temperature =  String(d.temperature_sensor,2);
   // String string_temperature =  String(tem, DEC); 
-  String string_moisture =  String(d.moisture_sensor, 2);
+  String string_moisture =  String(d.moisture_sensor);
   String string_light =  String(d.light_sensor, 2); 
-  buzzer();
-  
+   
   String url = "/macros/s/" + GAS_ID + "/exec?Temperature=" + string_temperature + "&Soil_Moisture=" + string_moisture + "&Light_Intensity=" + string_light + "&Door_Condition=" + d.door_condition ;
   Serial.print("requesting URL: ");
   Serial.println(url);
@@ -264,6 +287,55 @@ void sendData()
   //----------------------------------------
   
 } 
+
+
+//FUNCTION FOR SENDIND DOOR DATA
+void sendMoistureData()
+{
+  Serial.println("==========");
+  Serial.print("connecting to ");
+  Serial.println(host);
+
+  //----------------------------------------Connect to Google host
+  if (!client.connect(host, httpsPort)) 
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  //----------------------------------------
+  String string_moisture =  String(d.moisture_sensor);
+
+  String url = "/macros/s/" + GAS_ID + "/exec?Soil_Moisture=" + string_moisture;
+  Serial.print("requesting URL: ");
+  Serial.println(url);
+ 
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+         "Host: " + host + "\r\n" +
+         "User-Agent: BuildFailureDetectorESP8266\r\n" +
+         "Connection: close\r\n\r\n");
+ 
+  Serial.println("request sent");
+  //----------------------------------------
+ 
+  //----------------------------------------Checking whether the data was sent successfully or not
+  while (client.connected()) 
+  {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") 
+    {
+      Serial.println("headers received");
+      break;
+    }
+  }
+  String line = client.readStringUntil('\n');
+  Serial.print("reply was : ");
+  Serial.println(line);
+  Serial.println("closing connection");
+  Serial.println("==========");
+  Serial.println();
+  //----------------------------------------
+}
+
 
 //FUNCTION FOR SENDIND DOOR DATA
 void sendDoorData()
@@ -310,6 +382,9 @@ void sendDoorData()
   Serial.println();
   //----------------------------------------
 }
+
+
+
 
 
 //FUNCTION FOR SENDIND TEMPERATURE DATA
@@ -360,6 +435,9 @@ void sendTemperatureData()
 }
 
 
+
+
+
 //FUNCTION FOR BUZZER
 void buzzer()
 {
@@ -373,11 +451,15 @@ void buzzer()
 }
 
 
+
+
 //INTERRUPT SERVICE ROUTINE
 void IRAM_ATTR handleInterrupt() 
 {
     int_flag = 1; 
 }
+
+
 
 
 
@@ -423,6 +505,8 @@ void setup()
     Serial.println("\nFailed to connect to WiFi");
   }
 }
+
+
 
 
 void loop()
