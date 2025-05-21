@@ -55,13 +55,14 @@ struct data
   float light_sensor;
   float temperature_sensor;
   float moisture_sensor;
+  bool int_flag = 0;//FLAG USED FOR INTERRUPT 
+
 }d;
 
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 BH1750 lightMeter;
-bool int_flag = 0;//FLAG USED FOR INTERRUPT 
 
 
 // FUNCTION PROTOTYPE OR DECLARATION
@@ -85,7 +86,10 @@ void sendMoistureData();
 // FUNCTION FOR READING FROM DATA GOOGLE_SHEET
 SheetValues readGoogleSheet()
 {
-  SheetValues result = {0, 0, false};
+  static int tempA2 = 0;
+  static int tempB2 = 0;
+  static int tempC2 = 0;
+  SheetValues result = {0, 0, 0,false};
   
   if (WiFi.status() != WL_CONNECTED)
   {
@@ -116,16 +120,28 @@ SheetValues readGoogleSheet()
       result.A2 = doc["A2"];
       result.B2 = doc["B2"];
       result.C2 = doc["C2"];
+      tempA2 = result.A2;
+      tempB2 = result.B2;
+      tempC2 = result.C2;
       result.success = true;
+
+      
     } 
     else 
     {
+      result.A2 = tempA2;
+      result.B2 = tempB2;
+      result.C2 = tempC2;
       Serial.print("JSON error: ");
       Serial.println(error.c_str());
     }
   } 
   else 
   {
+    
+    result.A2 = tempA2;
+    result.B2 = tempB2;
+    result.C2 = tempC2; 
     Serial.print("HTTP error: ");
     Serial.println(httpCode);
   }
@@ -212,10 +228,10 @@ float moisture()
   moisturePercent = constrain(moisturePercent, 0, 100);
   Serial.print(mos);
   Serial.println(moisturePercent);
-  if(moisturePercent<=20)
-  {
-    sendMoistureData();
-  }
+  // if(moisturePercent<=20)
+  // {
+  //   sendMoistureData();
+  // }
   return moisturePercent;
 }
 
@@ -229,7 +245,10 @@ void collect_data()
   d.moisture_sensor=moisture();
   d.light_sensor=light_intensity();
   door_status();
-  buzzer();
+  if(d.temperature_sensor >= values.A2 && (d.int_flag == 0)  )
+  {
+    buzzer();
+  }
 }
 
 
@@ -441,13 +460,14 @@ void sendTemperatureData()
 //FUNCTION FOR BUZZER
 void buzzer()
 {
-  if(d.temperature_sensor >= values.A2)
-  {
     sendTemperatureData();
-    digitalWrite(BUZZER_PIN, HIGH);  // Turn ON once
-    delay(values.B2 * 1000);       // Wait for full duration
-    digitalWrite(BUZZER_PIN, LOW);   // Turn OFF
-  }
+    unsigned long buzzerStart = millis();
+    digitalWrite(BUZZER_PIN, HIGH);
+    while (millis() - buzzerStart < (values.B2 * 1000)) 
+    {
+      yield();  // Keeps WiFi and background tasks running
+    }
+    digitalWrite(BUZZER_PIN, LOW);
 }
 
 
@@ -456,7 +476,7 @@ void buzzer()
 //INTERRUPT SERVICE ROUTINE
 void IRAM_ATTR handleInterrupt() 
 {
-    int_flag = 1; 
+    d.int_flag = 1; 
 }
 
 
@@ -512,27 +532,30 @@ void setup()
 void loop()
  {
   unsigned long currentMillis = millis();
-  unsigned long readInterval = 3000;          // 3 seconds for reading
+  unsigned long readInterval = 3000;          // 1 seconds for reading
   unsigned long sendInterval = values.C2 * 60 * 1000;  // C2 minutes for sending
+
   
   // Handle interrupt flag (highest priority)
-  if (int_flag == 1) 
+  if (d.int_flag == 1) 
   {
-    int_flag = 0;
     door_status();
     sendDoorData();
+    d.int_flag = 0;
   }
+ 
 
   // Independent timing for reading/collecting data
   if (currentMillis - d.previousReadMillis >= readInterval) 
   {
     d.previousReadMillis = currentMillis;  // Reset the timer
     read();
-    collect_data();
+    collect_data(); 
   }  
 
+
   // Independent timing for sending data
-  if (currentMillis - d.previousSendMillis >= sendInterval) 
+  if (currentMillis - d.previousSendMillis >= sendInterval  ) 
   {
     d.previousSendMillis = currentMillis;  // Reset the timer
     sendData();
