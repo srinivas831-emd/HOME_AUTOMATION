@@ -86,9 +86,9 @@ void sendMoistureData();
 // FUNCTION FOR READING FROM DATA GOOGLE_SHEET
 SheetValues readGoogleSheet()
 {
-  static int tempA2 = 0;
-  static int tempB2 = 0;
-  static int tempC2 = 0;
+  static int tempA2;
+  static int tempB2;
+  static int tempC2;
   SheetValues result = {0, 0, 0,false};
   
   if (WiFi.status() != WL_CONNECTED)
@@ -120,12 +120,10 @@ SheetValues readGoogleSheet()
       result.A2 = doc["A2"];
       result.B2 = doc["B2"];
       result.C2 = doc["C2"];
+      result.success = true;
       tempA2 = result.A2;
       tempB2 = result.B2;
       tempC2 = result.C2;
-      result.success = true;
-
-      
     } 
     else 
     {
@@ -245,10 +243,6 @@ void collect_data()
   d.moisture_sensor=moisture();
   d.light_sensor=light_intensity();
   door_status();
-  if(d.temperature_sensor >= values.A2 && (d.int_flag == 0)  )
-  {
-    buzzer();
-  }
 }
 
 
@@ -481,8 +475,6 @@ void IRAM_ATTR handleInterrupt()
 
 
 
-
-
 void setup() 
 {
   Serial.begin(9600);
@@ -532,30 +524,27 @@ void setup()
 void loop()
  {
   unsigned long currentMillis = millis();
-  unsigned long readInterval = 3000;          // 1 seconds for reading
   unsigned long sendInterval = values.C2 * 60 * 1000;  // C2 minutes for sending
 
   
   // Handle interrupt flag (highest priority)
   if (d.int_flag == 1) 
   {
+    d.int_flag = 0;
     door_status();
     sendDoorData();
-    d.int_flag = 0;
   }
- 
-
-  // Independent timing for reading/collecting data
-  if (currentMillis - d.previousReadMillis >= readInterval) 
-  {
-    d.previousReadMillis = currentMillis;  // Reset the timer
+  
     read();
     collect_data(); 
-  }  
+    if(d.temperature_sensor >= values.A2 && (d.int_flag == 0)  )
+  {
+    buzzer();
+  }
 
 
   // Independent timing for sending data
-  if (currentMillis - d.previousSendMillis >= sendInterval  ) 
+  if (currentMillis - d.previousSendMillis >= sendInterval ) 
   {
     d.previousSendMillis = currentMillis;  // Reset the timer
     sendData();
