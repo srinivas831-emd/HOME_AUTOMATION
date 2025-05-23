@@ -55,8 +55,7 @@ struct data
   float light_sensor;
   float temperature_sensor;
   float moisture_sensor;
-  bool int_flag = 0;//FLAG USED FOR INTERRUPT 
-
+  volatile char int_flag = 0;
 }d;
 
 
@@ -454,10 +453,10 @@ void sendTemperatureData()
 //FUNCTION FOR BUZZER
 void buzzer()
 {
-    sendTemperatureData();
+
     unsigned long buzzerStart = millis();
     digitalWrite(BUZZER_PIN, HIGH);
-    while (millis() - buzzerStart < (values.B2 * 1000)) 
+    while (millis() - buzzerStart <(unsigned long)(values.B2 * 1000)) 
     {
       yield();  // Keeps WiFi and background tasks running
     }
@@ -526,19 +525,20 @@ void loop()
   unsigned long currentMillis = millis();
   unsigned long sendInterval = values.C2 * 60 * 1000;  // C2 minutes for sending
 
-  
   // Handle interrupt flag (highest priority)
   if (d.int_flag == 1) 
   {
-    d.int_flag = 0;
+     d.int_flag = 0;
     door_status();
     sendDoorData();
+   
   }
   
     read();
     collect_data(); 
-    if(d.temperature_sensor >= values.A2 && (d.int_flag == 0)  )
+    if(d.temperature_sensor >= values.A2)
   {
+    sendTemperatureData();
     buzzer();
   }
 
@@ -548,6 +548,6 @@ void loop()
   {
     d.previousSendMillis = currentMillis;  // Reset the timer
     sendData();
-  }    
+  }   
 } 
  
