@@ -524,14 +524,15 @@ void loop()
  {
   unsigned long currentMillis = millis();
   unsigned long sendInterval = values.C2 * 60 * 1000;  // C2 minutes for sending
+  static unsigned long lastInterruptTime = 0;  // Handle interrupt flag (highest priority)
 
-  // Handle interrupt flag (highest priority)
-  if (d.int_flag == 1) 
+  // Door interrupt handling
+  if (d.int_flag == 1 && (currentMillis - lastInterruptTime > 500)) 
   {
-     d.int_flag = 0;
+    lastInterruptTime = currentMillis;
+    d.int_flag = 0;
     door_status();
     sendDoorData();
-   
   }
   
     read();
