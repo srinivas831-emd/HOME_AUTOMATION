@@ -50,6 +50,7 @@ struct data
   unsigned long previousSendMillis = 0;
   char door_condition[16];
   unsigned long previousMillis = 0;
+  char tempDoorCon[16];
   int dryValue = 711;
   int wetValue = 304;
   float light_sensor;
@@ -271,7 +272,7 @@ void sendData()
   String url = "/macros/s/" + GAS_ID + "/exec?Temperature=" + string_temperature + "&Soil_Moisture=" + string_moisture + "&Light_Intensity=" + string_light + "&Door_Condition=" + d.door_condition ;
   Serial.print("requesting URL: ");
   Serial.println(url);
- 
+  strcpy(d.tempDoorCon,d.door_condition);
   client.print(String("GET ") + url + " HTTP/1.1\r\n" +
          "Host: " + host + "\r\n" +
          "User-Agent: BuildFailureDetectorESP8266\r\n" +
@@ -301,53 +302,6 @@ void sendData()
 } 
 
 
-//FUNCTION FOR SENDIND DOOR DATA
-void sendMoistureData()
-{
-  Serial.println("==========");
-  Serial.print("connecting to ");
-  Serial.println(host);
-
-  //----------------------------------------Connect to Google host
-  if (!client.connect(host, httpsPort)) 
-  {
-    Serial.println("connection failed");
-    return;
-  }
-  //----------------------------------------
-  String string_moisture =  String(d.moisture_sensor);
-
-  String url = "/macros/s/" + GAS_ID + "/exec?Soil_Moisture=" + string_moisture;
-  Serial.print("requesting URL: ");
-  Serial.println(url);
- 
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-         "Host: " + host + "\r\n" +
-         "User-Agent: BuildFailureDetectorESP8266\r\n" +
-         "Connection: close\r\n\r\n");
- 
-  Serial.println("request sent");
-  //----------------------------------------
- 
-  //----------------------------------------Checking whether the data was sent successfully or not
-  while (client.connected()) 
-  {
-    String line = client.readStringUntil('\n');
-    if (line == "\r") 
-    {
-      Serial.println("headers received");
-      break;
-    }
-  }
-  String line = client.readStringUntil('\n');
-  Serial.print("reply was : ");
-  Serial.println(line);
-  Serial.println("closing connection");
-  Serial.println("==========");
-  Serial.println();
-  //----------------------------------------
-}
-
 
 //FUNCTION FOR SENDIND DOOR DATA
 void sendDoorData()
@@ -367,7 +321,7 @@ void sendDoorData()
   String url = "/macros/s/" + GAS_ID + "/exec?Door_Condition=" + d.door_condition ;
   Serial.print("requesting URL: ");
   Serial.println(url);
- 
+  strcpy(d.tempDoorCon,d.door_condition);
   client.print(String("GET ") + url + " HTTP/1.1\r\n" +
          "Host: " + host + "\r\n" +
          "User-Agent: BuildFailureDetectorESP8266\r\n" +
@@ -532,6 +486,7 @@ void loop()
     lastInterruptTime = currentMillis;
     d.int_flag = 0;
     door_status();
+    if(strcmp(d.door_condition,d.tempDoorCon)!=0)
     sendDoorData();
   }
   
