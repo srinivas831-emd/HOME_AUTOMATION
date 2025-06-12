@@ -477,7 +477,7 @@ void setup()
 void loop()
  {
   unsigned long currentMillis = millis();
-  unsigned long sendInterval = values.C2 * 60 * 1000;  // C2 minutes for sending
+  unsigned long sendInterval = values.C2 *60000;  // C2 minutes for sending
   static unsigned long lastInterruptTime = 0;  // Handle interrupt flag (highest priority)
 
   // Door interrupt handling
@@ -490,6 +490,13 @@ void loop()
     sendDoorData();
   }
   
+  if (currentMillis - d.previousSendMillis >= sendInterval ) 
+  {
+    d.previousSendMillis = currentMillis;  // Reset the timer
+    sendData();
+  }   
+  else
+  {
     read();
     collect_data(); 
     if(d.temperature_sensor >= values.A2)
@@ -497,13 +504,8 @@ void loop()
     sendTemperatureData();
     buzzer();
   }
+  }
 
 
-  // Independent timing for sending data
-  if (currentMillis - d.previousSendMillis >= sendInterval ) 
-  {
-    d.previousSendMillis = currentMillis;  // Reset the timer
-    sendData();
-  }   
 } 
  
